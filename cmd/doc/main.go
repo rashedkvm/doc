@@ -56,7 +56,6 @@ var (
 
 	cookieDarkMode = "halfmoon_preferredMode"
 
-	// address   string
 	analytics bool = false
 
 	gitterChan chan models.GitterRepo

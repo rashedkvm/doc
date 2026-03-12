@@ -1,30 +1,37 @@
-# Use the official Golang image to create a build artifact.
-# This is based on Debian and sets the GOPATH to /go.
-# https://hub.docker.com/_/golang
-FROM golang:1.23 as builder
+# Build stage
+FROM golang:1.23 AS builder
 
-WORKDIR app/
+WORKDIR /app
 
-# Copy internal libraries.
-COPY . .
-
-# Retrieve application dependencies.
-# This allows the container build to reuse cached dependencies.
+# Copy dependency files first for better layer caching
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Build the binary.
-RUN CGO_ENABLED=0 GOOS=linux go build -o doc -mod=readonly -v ./cmd/doc/main.go
+# Copy source code
+COPY . .
 
-# Use the official Alpine image for a lean production container.
-# https://hub.docker.com/_/alpine
-# https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -o doc -v ./cmd/doc/
+
+# Runtime stage
 FROM alpine:3
 RUN apk add --no-cache ca-certificates
 
-# Copy the binary to the production image from the builder stage.
-COPY --from=builder go/app/doc ./
-COPY ./template ./template
-COPY ./static ./static
+# Create non-root user
+RUN addgroup -g 1000 appgroup && \
+    adduser -u 1000 -G appgroup -D appuser
 
-# Run the web service on container startup.
-ENTRYPOINT ["/doc"]
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /app/doc ./
+
+# Copy template and static files
+COPY template/ ./template/
+COPY static/ ./static/
+
+# Change ownership and switch to non-root user (use numeric UID for K8s runAsNonRoot)
+RUN chown -R appuser:appgroup /app
+USER 1000
+
+ENTRYPOINT ["/app/doc"]

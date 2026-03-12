@@ -1,0 +1,28 @@
+#@ load("@ytt:data", "data")
+---
+global:
+  #@ if data.values.image_proxy != "":
+  imageRegistry: #@ data.values.image_proxy
+  security:
+    allowInsecureImages: true
+  #@ end
+  postgresql:
+    auth:
+      username: #@ data.values.dbuser
+      password: #@ data.values.dbpwd
+      database: #@ data.values.dbname
+      postgresPassword: #@ data.values.dbpwd
+
+primary:
+  persistence:
+    enabled: true
+    size: 1Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+
+readReplicas:
+  replicaCount: 0
