@@ -16,8 +16,11 @@ VALUES_FILE ?= config/values.yml
 # Image configuration (extracted from VALUES_FILE, can be overridden)
 REGISTRY ?= $(shell ytt -f $(VALUES_FILE) 2>/dev/null | grep '^registry:' | awk '{print $$2}' || echo "docker.io")
 IMAGE_TAG ?= $(shell ytt -f $(VALUES_FILE) 2>/dev/null | grep '^image_tag:' | awk '{print $$2}' || echo "latest")
-DOC_IMAGE = $(REGISTRY)/doc:$(IMAGE_TAG)
-GITTER_IMAGE = $(REGISTRY)/gitter:$(IMAGE_TAG)
+
+# Prepend IMAGE_PROXY to image URLs when set (for environments that mirror Docker Hub)
+IMAGE_PREFIX = $(if $(IMAGE_PROXY),$(IMAGE_PROXY)/,)
+DOC_IMAGE = $(IMAGE_PREFIX)$(REGISTRY)/doc:$(IMAGE_TAG)
+GITTER_IMAGE = $(IMAGE_PREFIX)$(REGISTRY)/gitter:$(IMAGE_TAG)
 
 # Sensitive credentials from environment variables (optional)
 # Usage: IMAGE_PROXY_USERNAME=user IMAGE_PROXY_PASSWORD=token make deploy

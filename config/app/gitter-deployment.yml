@@ -1,19 +1,13 @@
 #@ load("@ytt:data", "data")
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    kubernetes.io/metadata.name: #@ data.values.namespace
-  name: #@ data.values.namespace
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: doc
+  name: gitter
   namespace: #@ data.values.namespace
   labels:
     app: doc
+    component: gitter
   annotations:
     kapp.k14s.io/change-group: app
     kapp.k14s.io/change-rule: "upsert after upserting db"
@@ -22,21 +16,23 @@ spec:
   selector:
     matchLabels:
       app: doc
+      component: gitter
   template:
     metadata:
       labels:
         app: doc
+        component: gitter
     spec:
       #@ if data.values.image_proxy != "" and data.values.image_proxy_username != "":
       imagePullSecrets:
         - name: registry-credentials
       #@ end
       containers:
-        - name: doc
-          image: #@ data.values.doc_image
+        - name: gitter
+          image: #@ data.values.gitter_image
           ports:
-            - containerPort: #@ data.values.app_port
-              name: http
+            - containerPort: 1234
+              name: rpc
           env:
             - name: PG_USER
               valueFrom:
@@ -63,18 +59,11 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: PG_DB
-            - name: ANALYTICS
+            - name: REPOS
               valueFrom:
                 configMapKeyRef:
-                  name: doc-config
-                  key: ANALYTICS
-            - name: IS_DEV
-              valueFrom:
-                configMapKeyRef:
-                  name: doc-config
-                  key: IS_DEV
-            - name: GITTER_HOST
-              value: #@ "gitter-service." + data.values.namespace + ".svc.cluster.local:1234"
+                  name: doc-repos
+                  key: repos
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -86,19 +75,17 @@ spec:
               type: RuntimeDefault
           resources:
             requests:
-              memory: "64Mi"
+              memory: "128Mi"
               cpu: "250m"
             limits:
-              memory: "256Mi"
+              memory: "512Mi"
           readinessProbe:
-            httpGet:
-              path: /
-              port: #@ data.values.app_port
+            tcpSocket:
+              port: 1234
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /
-              port: #@ data.values.app_port
+            tcpSocket:
+              port: 1234
             initialDelaySeconds: 15
             periodSeconds: 20

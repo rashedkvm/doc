@@ -23,9 +23,6 @@ dbport: "5432"
 analytics: "false"
 is_dev: "false"
 
-#! Gitter CronJob settings
-gitter_schedule: "@hourly"
-
 #! Image registry proxy (e.g., mirror.gcr.io for rate-limited registries)
 image_proxy: ""
 image_proxy_username: ""

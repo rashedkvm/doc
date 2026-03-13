@@ -122,16 +122,27 @@ type homeData struct {
 	Repos []string
 }
 
+func getGitterHost() string {
+	host := os.Getenv("GITTER_HOST")
+	if host == "" {
+		host = "127.0.0.1:1234"
+	}
+	return host
+}
+
 func worker(gitterChan <-chan models.GitterRepo) {
+	gitterHost := getGitterHost()
 	for job := range gitterChan {
-		client, err := rpc.DialHTTP("tcp", "127.0.0.1:1234")
+		client, err := rpc.DialHTTP("tcp", gitterHost)
 		if err != nil {
-			log.Fatal("dialing:", err)
+			log.Printf("dialing gitter at %s: %v", gitterHost, err)
+			continue
 		}
 		reply := ""
 		if err := client.Call("Gitter.Index", job, &reply); err != nil {
 			log.Print("Could not index repo")
 		}
+		client.Close()
 	}
 }
 

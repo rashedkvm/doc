@@ -200,4 +200,4 @@ The image proxy is used for pulling base images (e.g., PostgreSQL) through a mir
 
 When proxy variables are set, the generated manifests will include:
 - A `registry-credentials` Secret with dockerconfigjson for the proxy
-- `imagePullSecrets` on all Deployments, CronJobs, and StatefulSets
+- `imagePullSecrets` on all Deployments and StatefulSets

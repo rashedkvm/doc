@@ -3,8 +3,8 @@
 #! For sensitive values (proxy credentials), use .env.local - see DEVELOPING.md
 
 #! Registry and image settings
-registry: "docker.io"
-image_tag: "latest"
+registry: "krashed843"
+image_tag: "v1.0.0"
 
 #! Application settings
 app_port: 5000
@@ -20,9 +20,6 @@ dbport: "5432"
 #! Feature flags
 analytics: "false"
 is_dev: "true"
-
-#! Gitter CronJob settings
-gitter_schedule: "@hourly"
 
 #! Image registry proxy (for pulling base images through a mirror)
 #! Leave empty if not using a proxy registry
