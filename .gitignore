@@ -1,3 +1,20 @@
+# Generated manifests
+dist/
+
+# Local environment file for secrets (used by Makefile)
+.env.local
+
+# Build artifacts
+/doc
+/gitter
+
+# IDE and editor files
+.idea
+.cursor
+Notes.txt
+
+# Legacy files (can be removed if present)
 deploy/dns
 *.rdb
 cloudsql.json
+log

@@ -1,0 +1,28 @@
+#! Default configuration for local development.
+#! Override registry/image_tag via env vars: REGISTRY=myregistry IMAGE_TAG=v1.0.0 make build-all
+#! For sensitive values (proxy credentials), use .env.local - see DEVELOPING.md
+
+#! Registry and image settings
+registry: "krashed843"
+image_tag: "v1.0.0"
+
+#! Application settings
+app_port: 5000
+namespace: doc-system
+
+#! Database connection settings
+dbname: doc
+dbuser: postgres
+dbpwd: password
+dbhost: pgsql-postgresql.postgres.svc.cluster.local
+dbport: "5432"
+
+#! Feature flags
+analytics: "false"
+is_dev: "true"
+
+#! Image registry proxy (for pulling base images through a mirror)
+#! Leave empty if not using a proxy registry
+image_proxy: ""
+image_proxy_username: ""
+image_proxy_password: ""

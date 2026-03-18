@@ -1,0 +1,18 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doc-service
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+spec:
+  type: ClusterIP
+  selector:
+    app: doc
+  ports:
+    - protocol: TCP
+      port: #@ data.values.app_port
+      targetPort: #@ data.values.app_port
+      name: http

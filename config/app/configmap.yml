@@ -1,0 +1,52 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doc-config
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+data:
+  PG_USER: #@ data.values.dbuser
+  PG_HOST: #@ data.values.dbhost
+  PG_PORT: #@ data.values.dbport
+  PG_DB: #@ data.values.dbname
+  ANALYTICS: #@ data.values.analytics
+  IS_DEV: #@ data.values.is_dev
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: doc-db-secret
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+type: Opaque
+stringData:
+  password: #@ data.values.dbpwd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doc-repos
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+data:
+  repos: |
+    crossplane/crossplane,
+    crossplane/provider-alibaba,
+    crossplane/provider-aws,
+    crossplane/provider-azure,
+    crossplane/provider-gcp,
+    crossplane/provider-rook,
+    crossplane/oam-kubernetes-runtime,
+    crossplane-contrib/provider-helm,
+    jetstack/cert-manager,
+    kubernetes-sigs/cluster-api,
+    kubernetes-sigs/cluster-api-provider-packet,
+    kubernetes-sigs/security-profiles-operator,
+    packethost/crossplane-provider-packet,
+    projectcontour/contour,
+    schemahero/schemahero

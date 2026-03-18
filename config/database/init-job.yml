@@ -1,0 +1,91 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-script
+  namespace: postgres
+  labels:
+    app: doc
+    component: db-init
+  annotations:
+    kapp.k14s.io/change-group: db-init
+    kapp.k14s.io/change-rule: "upsert after upserting db"
+data:
+  #! Schema is loaded from schema/crds_up.sql via --data-value-file in Makefile
+  init.sql: #@ data.values.init_sql
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: postgres
+  labels:
+    app: doc
+    component: db-init
+  annotations:
+    kapp.k14s.io/change-group: db-init
+    kapp.k14s.io/change-rule: "upsert after upserting db"
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: doc
+        component: db-init
+    spec:
+      #@ if data.values.image_proxy != "" and data.values.image_proxy_username != "":
+      imagePullSecrets:
+        - name: registry-credentials
+      #@ end
+      restartPolicy: OnFailure
+      containers:
+        - name: db-init
+          #@ if data.values.image_proxy != "":
+          image: #@ data.values.image_proxy + "/bitnami/postgresql:16"
+          #@ else:
+          image: postgres:16
+          #@ end
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h $PGHOST -p $PGPORT -U $PGUSER; do
+                echo "PostgreSQL is not ready yet. Retrying in 2 seconds..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready. Running init script..."
+              
+              # Check if database already exists
+              if psql -h $PGHOST -p $PGPORT -U $PGUSER -lqt | cut -d \| -f 1 | grep -qw doc; then
+                echo "Database 'doc' already exists. Skipping creation."
+                psql -h $PGHOST -p $PGPORT -U $PGUSER -d doc -f /scripts/init.sql 2>/dev/null || true
+              else
+                psql -h $PGHOST -p $PGPORT -U $PGUSER -f /scripts/init.sql
+              fi
+              
+              echo "Database initialization complete."
+          env:
+            - name: PGHOST
+              value: pgsql-postgresql.postgres.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: #@ data.values.dbuser
+            - name: PGPASSWORD
+              value: #@ data.values.dbpwd
+          volumeMounts:
+            - name: init-script
+              mountPath: /scripts
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+      volumes:
+        - name: init-script
+          configMap:
+            name: db-init-script

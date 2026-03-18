@@ -1,0 +1,32 @@
+#@data/values-schema
+---
+#! Registry and image settings
+registry: "docker.io"
+image_tag: "latest"
+
+#! Application settings
+app_port: 5000
+namespace: doc-system
+
+#! Container images (can be overridden, otherwise derived from registry/image_tag)
+doc_image: "doc:latest"
+gitter_image: "gitter:latest"
+
+#! Database connection settings
+dbname: doc
+dbuser: postgres
+dbpwd: password
+dbhost: pgsql-postgresql.postgres.svc.cluster.local
+dbport: "5432"
+
+#! Feature flags
+analytics: "false"
+is_dev: "false"
+
+#! Image registry proxy (e.g., mirror.gcr.io for rate-limited registries)
+image_proxy: ""
+image_proxy_username: ""
+image_proxy_password: ""
+
+#! Database initialization SQL (loaded from schema/crds_up.sql via Makefile)
+init_sql: ""

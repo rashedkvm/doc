@@ -1,0 +1,91 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitter
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+    component: gitter
+  annotations:
+    kapp.k14s.io/change-group: app
+    kapp.k14s.io/change-rule: "upsert after upserting db"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: doc
+      component: gitter
+  template:
+    metadata:
+      labels:
+        app: doc
+        component: gitter
+    spec:
+      #@ if data.values.image_proxy != "" and data.values.image_proxy_username != "":
+      imagePullSecrets:
+        - name: registry-credentials
+      #@ end
+      containers:
+        - name: gitter
+          image: #@ data.values.gitter_image
+          ports:
+            - containerPort: 1234
+              name: rpc
+          env:
+            - name: PG_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_USER
+            - name: PG_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: doc-db-secret
+                  key: password
+            - name: PG_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_HOST
+            - name: PG_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_PORT
+            - name: PG_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_DB
+            - name: REPOS
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-repos
+                  key: repos
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 1234
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 1234
+            initialDelaySeconds: 15
+            periodSeconds: 20

@@ -1,0 +1,105 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    kubernetes.io/metadata.name: #@ data.values.namespace
+  name: #@ data.values.namespace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doc
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+  annotations:
+    kapp.k14s.io/change-group: app
+    kapp.k14s.io/change-rule: "upsert after upserting db"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: doc
+  template:
+    metadata:
+      labels:
+        app: doc
+    spec:
+      #@ if data.values.image_proxy != "" and data.values.image_proxy_username != "":
+      imagePullSecrets:
+        - name: registry-credentials
+      #@ end
+      containers:
+        - name: doc
+          image: #@ data.values.doc_image
+          imagePullPolicy: Always
+          ports:
+            - containerPort: #@ data.values.app_port
+              name: http
+          env:
+            - name: PG_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_USER
+            - name: PG_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: doc-db-secret
+                  key: password
+            - name: PG_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_HOST
+            - name: PG_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_PORT
+            - name: PG_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: PG_DB
+            - name: ANALYTICS
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: ANALYTICS
+            - name: IS_DEV
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: IS_DEV
+            - name: GITTER_HOST
+              value: #@ "gitter-service." + data.values.namespace + ".svc.cluster.local:1234"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: #@ data.values.app_port
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: #@ data.values.app_port
+            initialDelaySeconds: 15
+            periodSeconds: 20

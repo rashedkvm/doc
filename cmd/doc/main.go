@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -32,8 +33,8 @@ import (
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	flag "github.com/spf13/pflag"
 	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -56,7 +57,6 @@ var (
 
 	cookieDarkMode = "halfmoon_preferredMode"
 
-	address   string
 	analytics bool = false
 
 	gitterChan chan models.GitterRepo
@@ -80,6 +80,13 @@ var page = render.New(render.Options{
 					Parent: p,
 					Schema: s,
 				}
+			},
+			"toJSON": func(v interface{}) template.JS {
+				b, err := json.Marshal(v)
+				if err != nil {
+					return template.JS("{}")
+				}
+				return template.JS(b)
 			},
 		},
 	},
@@ -123,16 +130,27 @@ type homeData struct {
 	Repos []string
 }
 
+func getGitterHost() string {
+	host := os.Getenv("GITTER_HOST")
+	if host == "" {
+		host = "127.0.0.1:1234"
+	}
+	return host
+}
+
 func worker(gitterChan <-chan models.GitterRepo) {
+	gitterHost := getGitterHost()
 	for job := range gitterChan {
-		client, err := rpc.DialHTTP("tcp", "127.0.0.1:1234")
+		client, err := rpc.DialHTTP("tcp", gitterHost)
 		if err != nil {
-			log.Fatal("dialing:", err)
+			log.Printf("dialing gitter at %s: %v", gitterHost, err)
+			continue
 		}
 		reply := ""
 		if err := client.Call("Gitter.Index", job, &reply); err != nil {
 			log.Print("Could not index repo")
 		}
+		client.Close()
 	}
 }
 
@@ -162,7 +180,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	db, err = pgxpool.ConnectConfig(context.Background(), conn)
+	db, err = pgxpool.New(context.Background(), conn.ConnString())
 	if err != nil {
 		panic(err)
 	}

@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -36,8 +35,8 @@ import (
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
 	"gopkg.in/square/go-jose.v2/json"
 	yaml "gopkg.in/yaml.v3"
@@ -59,7 +58,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	pool, err := pgxpool.ConnectConfig(context.Background(), conn)
+	pool, err := pgxpool.New(context.Background(), conn.ConnString())
 	if err != nil {
 		panic(err)
 	}
@@ -91,7 +90,7 @@ type tag struct {
 func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 	log.Printf("Indexing repo %s/%s...\n", gRepo.Org, gRepo.Repo)
 
-	dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
+	dir, err := os.MkdirTemp(os.TempDir(), "doc-gitter")
 	if err != nil {
 		return err
 	}
@@ -230,7 +229,7 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 func getYAMLs(greps []git.GrepResult, dir string) map[string][][]byte {
 	allCRDs := map[string][][]byte{}
 	for _, res := range greps {
-		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
+		b, err := os.ReadFile(dir + "/" + res.FileName)
 		if err != nil {
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
@@ -253,7 +252,7 @@ func splitYAML(file []byte, filename string) ([][]byte, error) {
 	defer func() {
 		if err := recover(); err != nil {
 			yamls = make([][]byte, 0)
-			err = fmt.Errorf("panic while processing yaml file: %w", err)
+			err = fmt.Errorf("panic while processing yaml file: %s", err)
 		}
 	}()
 

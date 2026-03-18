@@ -1,0 +1,39 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:overlay", "overlay")
+
+#! Create the postgres namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    kubernetes.io/metadata.name: postgres
+    app.kubernetes.io/name: postgresql
+  name: postgres
+
+#! Add kapp change-group annotation to StatefulSet for deployment ordering
+#@overlay/match by=overlay.subset({"apiVersion": "apps/v1", "kind": "StatefulSet", "metadata":{"name": "pgsql-postgresql"}})
+---
+metadata:
+  #@overlay/match missing_ok=True
+  annotations:
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/change-group: db
+
+#! Add kapp change-group annotation to Service for deployment ordering
+#@overlay/match by=overlay.subset({"apiVersion": "v1", "kind": "Service", "metadata":{"name": "pgsql-postgresql"}})
+---
+metadata:
+  #@overlay/match missing_ok=True
+  annotations:
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/change-group: db
+
+#! Add kapp change-group annotation to headless Service
+#@overlay/match by=overlay.subset({"apiVersion": "v1", "kind": "Service", "metadata":{"name": "pgsql-postgresql-hl"}})
+---
+metadata:
+  #@overlay/match missing_ok=True
+  annotations:
+    #@overlay/match missing_ok=True
+    kapp.k14s.io/change-group: db
