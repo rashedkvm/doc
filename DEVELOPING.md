@@ -5,16 +5,16 @@
 ```bash
 # 1. Set up credentials (one-time, file is gitignored)
 cat > .env.local << 'EOF'
-IMAGE_PROXY=tapi-docker-virtual.usw1.packages.broadcom.com
+IMAGE_PROXY=registry-proxy.example.com
 IMAGE_PROXY_USERNAME=your-username
 IMAGE_PROXY_PASSWORD=your-token
 EOF
 
 # 2. Build and push images
-REGISTRY=krashed843 IMAGE_TAG=v1.0.0 make build-all push-all
+REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all push-all
 
 # 3. Generate manifests and deploy
-REGISTRY=krashed843 IMAGE_TAG=v1.0.0 make deploy-all
+REGISTRY=your-registry IMAGE_TAG=v1.0.0 make deploy-all
 ```
 
 ## Prerequisites
@@ -53,7 +53,7 @@ analytics: "false"
 is_dev: "true"
 ```
 
-**Note:** The `registry` and `image_tag` values are used as defaults. Override them via environment variables: `REGISTRY=krashed843 IMAGE_TAG=v1.0.0 make build-all`
+**Note:** The `registry` and `image_tag` values are used as defaults. Override them via environment variables: `REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all`
 
 ### Passing Sensitive Values
 
@@ -63,7 +63,7 @@ Sensitive values (registry credentials, passwords) are managed via a `.env.local
 
 ```bash
 cat > .env.local << 'EOF'
-IMAGE_PROXY=tapi-docker-virtual.usw1.packages.broadcom.com
+IMAGE_PROXY=registry-proxy.example.com
 IMAGE_PROXY_USERNAME=your-username
 IMAGE_PROXY_PASSWORD=your-token
 DB_PASSWORD=your-db-password
@@ -91,7 +91,7 @@ IMAGE_PROXY_USERNAME=myuser IMAGE_PROXY_PASSWORD=mytoken make deploy
 make deploy
 
 # Override registry and tag for your images
-REGISTRY=krashed843 IMAGE_TAG=v1.0.0 make build-all push-all deploy
+REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all push-all deploy
 ```
 
 ### Custom Values Files
@@ -178,7 +178,7 @@ Build, push, and deploy in one command:
 make release
 
 # With custom registry and tag
-REGISTRY=krashed843 IMAGE_TAG=v1.0.0 make release
+REGISTRY=your-registry IMAGE_TAG=v1.0.0 make release
 ```
 
 ### Using an Image Registry Proxy
@@ -187,7 +187,7 @@ The image proxy is used for pulling base images (e.g., PostgreSQL) through a mir
 
 1. Add proxy credentials to `.env.local`:
    ```bash
-   IMAGE_PROXY=tapi-docker-virtual.usw1.packages.broadcom.com
+   IMAGE_PROXY=registry-proxy.example.com
    IMAGE_PROXY_USERNAME=your-username
    IMAGE_PROXY_PASSWORD=your-token
    ```
