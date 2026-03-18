@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23 AS builder
+FROM golang:1.24 AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o doc -v ./cmd/doc/
 
 # Runtime stage
 FROM alpine:3
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 
 # Create non-root user
 RUN addgroup -g 1000 appgroup && \

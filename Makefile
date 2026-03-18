@@ -135,7 +135,7 @@ run-db: ## Run PostgreSQL in a local container
 	@docker rm $(POSTGRES_CONTAINER_NAME) > /dev/null 2>&1 || true
 	docker run --name $(POSTGRES_CONTAINER_NAME) \
 		-e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
-		-d -p $(POSTGRES_PORT):5432 postgres:16
+		-d -p $(POSTGRES_PORT):5432 postgres:18
 	@echo "PostgreSQL started. Run 'make init-db' to initialize the schema."
 	@echo "Connection: psql -h localhost -U postgres -d postgres"
 
@@ -149,12 +149,33 @@ clean-db: ## Stop and remove local PostgreSQL container
 init-db: ## Initialize the database schema
 	@echo "Waiting for PostgreSQL to be ready..."
 	@sleep 3
-	psql -h 127.0.0.1 -U postgres -d postgres -a -f schema/crds_up.sql
+	PGPASSWORD=$(POSTGRES_PASSWORD) psql -h 127.0.0.1 -U postgres -d postgres -a -f schema/crds_up.sql
 
 .PHONY: run
 run: ## Run the doc application locally
 	PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
 		go run ./cmd/doc/main.go
+
+.PHONY: run-gitter
+run-gitter: ## Run the gitter application locally
+	PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
+		go run ./cmd/gitter/main.go
+
+.PHONY: sandbox
+sandbox: run-db init-db run-gitter run ## Run the doc and gitter applications locally
+
+.PHONY: clean-sandbox
+clean-sandbox: clean-db clean-gitter clean ## Clean the doc and gitter applications locally
+
+.PHONY: clean-gitter
+clean-gitter: ## Clean the local gitter application
+	-kill $$(lsof -t -i :1234) 2>/dev/null || true
+	-pkill -f "go run cmd/gitter/main.go" 2>/dev/null || true
+
+.PHONY: clean
+clean: ## Clean the local doc application
+	-kill $$(lsof -t -i :5000) 2>/dev/null || true
+	-pkill -f "go run cmd/doc/main.go" 2>/dev/null || true
 
 ##@ Help
 

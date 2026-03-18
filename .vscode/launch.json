@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug doc",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/doc/main.go",
+      "env": {
+        "PG_USER": "postgres",
+        "PG_PASS": "password",
+        "PG_HOST": "127.0.0.1",
+        "PG_PORT": "5432",
+        "PG_DB": "doc",
+        "GITTER_HOST": "127.0.0.1:1234",
+        "IS_DEV": "true"
+      }
+    },
+    {
+      "name": "Debug gitter",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/gitter/main.go",
+      "env": {
+        "PG_USER": "postgres",
+        "PG_PASS": "password",
+        "PG_HOST": "127.0.0.1",
+        "PG_PORT": "5432",
+        "PG_DB": "doc"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug All (gitter + doc)",
+      "configurations": ["Debug gitter", "Debug doc"]
+    }
+  ]
+}

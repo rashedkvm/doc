@@ -34,6 +34,7 @@ spec:
       containers:
         - name: doc
           image: #@ data.values.doc_image
+          imagePullPolicy: Always
           ports:
             - containerPort: #@ data.values.app_port
               name: http

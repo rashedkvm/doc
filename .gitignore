@@ -17,3 +17,4 @@ Notes.txt
 deploy/dns
 *.rdb
 cloudsql.json
+log
