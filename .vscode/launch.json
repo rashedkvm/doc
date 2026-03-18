@@ -7,6 +7,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/doc/main.go",
+      "cwd": "${workspaceFolder}",
       "env": {
         "PG_USER": "postgres",
         "PG_PASS": "password",
@@ -23,6 +24,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/gitter/main.go",
+      "cwd": "${workspaceFolder}",
       "env": {
         "PG_USER": "postgres",
         "PG_PASS": "password",

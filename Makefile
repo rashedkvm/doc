@@ -7,7 +7,7 @@ SHELL := /bin/bash
 export
 
 # Suppress kapp prompts with KAPP_ARGS="--yes"
-KAPP_ARGS ?= --yes=false
+KAPP_ARGS ?= "--yes=false"
 
 # Values file for environment-specific configuration
 # Override with: VALUES_FILE=config/values-prod.yml make deploy
@@ -90,7 +90,7 @@ db-gen: ## Generate PostgreSQL deployment manifest from Helm chart
 			--data-value-file init_sql=schema/crds_up.sql > dist/postgres.yml
 
 .PHONY: db-deploy
-db-deploy: db-gen ## Deploy PostgreSQL to the K8s cluster
+db-deploy: ## Deploy PostgreSQL to the K8s cluster
 	kapp deploy -a doc-db -n kube-public -f dist/postgres.yml $(KAPP_ARGS)
 
 .PHONY: db-undeploy
@@ -104,7 +104,7 @@ dist: ## Generate application deployment manifests
 	@mkdir -p dist
 	ytt -f config/app/ --data-values-file $(VALUES_FILE) \
 		-v doc_image=$(DOC_IMAGE) -v gitter_image=$(GITTER_IMAGE) \
-		$(YTT_ENV_ARGS) > dist/doc-app.yml
+		$(YTT_ENV_ARGS) | kbld -f - > dist/doc-app.yml
 
 .PHONY: deploy
 deploy: dist ## Deploy doc application to the K8s cluster

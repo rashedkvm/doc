@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -79,6 +80,13 @@ var page = render.New(render.Options{
 					Parent: p,
 					Schema: s,
 				}
+			},
+			"toJSON": func(v interface{}) template.JS {
+				b, err := json.Marshal(v)
+				if err != nil {
+					return template.JS("{}")
+				}
+				return template.JS(b)
 			},
 		},
 	},
