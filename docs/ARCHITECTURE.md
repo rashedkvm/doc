@@ -81,6 +81,8 @@ An optional standalone gitter binary (`cmd/gitter`) is kept for backward compati
 
 The user-facing HTTP server built with `gorilla/mux`. It serves HTML pages rendered via Go's `html/template` engine (through the `unrolled/render` library). It reads CRD data from the configured Store (SQLite or PostgreSQL) and, when a repository is not yet indexed, dispatches an indexing job to a pool of worker goroutines that call `pkg/indexer` directly.
 
+Template data structs share a common `pageData` base that carries both layout flags (`Analytics`, `IsDarkMode`, `DisableNavBar`, `Title`) and route context (`Host`, `Repo`, `Tag`, `Group`, `Version`, `Kind`). Page-specific structs (`docData`, `orgData`, `homeData`) embed `pageData` via a `Page` field and add their own fields. Templates access shared fields via `.Page.*` (e.g. `.Page.Host`), which allows partials like the navbar to safely check `{{ if .Page.Host }}` regardless of which data struct is passed.
+
 **Key responsibilities:**
 
 | Responsibility | Details |
@@ -162,6 +164,7 @@ The `store.New(driver, dsn)` constructor accepts an explicit driver name (`"sqli
 
 | Variable | Default | Description |
 |---|---|---|
+| `APP_PORT` | `5000` | HTTP listen port for the Doc server |
 | `DB_DRIVER` | `sqlite` | Backend: `sqlite` or `postgres` |
 | `DB_DSN` | `./doc.db` | File path (SQLite) or connection string (PostgreSQL) |
 
@@ -383,7 +386,7 @@ graph TB
         subgraph ns ["Namespace: doc-system"]
             DocDeploy["Deployment: doc<br/>replicas: 1"]
             DocSvc["Service: doc-service<br/>ClusterIP :5000"]
-            CM["ConfigMap: doc-config<br/>DB_DRIVER=sqlite, DB_DSN,<br/>ANALYTICS, IS_DEV"]
+            CM["ConfigMap: doc-config<br/>APP_PORT, DB_DRIVER=sqlite,<br/>DB_DSN, ANALYTICS, IS_DEV"]
             ReposCM["ConfigMap: doc-repos<br/>repos list"]
             EmptyDir["emptyDir volume<br/>(ephemeral SQLite)"]
         end
@@ -406,7 +409,7 @@ graph TB
             DocSvc["Service: doc-service<br/>ClusterIP :5000"]
             GitterDeploy["Deployment: gitter<br/>(optional) replicas: 1"]
             GitterSvc["Service: gitter-service<br/>ClusterIP :1234"]
-            CM["ConfigMap: doc-config<br/>DB_DRIVER=postgres, PG_*"]
+            CM["ConfigMap: doc-config<br/>APP_PORT, DB_DRIVER=postgres, PG_*"]
             Secret["Secret: doc-db-secret"]
             ReposCM["ConfigMap: doc-repos"]
         end

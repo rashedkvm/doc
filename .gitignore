@@ -18,3 +18,9 @@ deploy/dns
 *.rdb
 cloudsql.json
 log
+doc.db**
+data/doc.db
+cover.out
+
+.env.local
+local.values.yml

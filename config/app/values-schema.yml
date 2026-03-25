@@ -12,12 +12,23 @@ namespace: doc-system
 doc_image: "doc:latest"
 gitter_image: "gitter:latest"
 
-#! Database connection settings
+#! Database driver: "sqlite" (default) or "postgres"
+db_driver: "sqlite"
+#! DSN: file path for SQLite, connection string for PostgreSQL
+db_dsn: "/data/doc.db"
+
+#! Database connection settings (only used when db_driver is "postgres")
 dbname: doc
 dbuser: postgres
 dbpwd: password
 dbhost: pgsql-postgresql.postgres.svc.cluster.local
 dbport: "5432"
+
+#! Repository host providers
+#@schema/type any=True
+providers:
+  - host: "github.com"
+    type: "github"
 
 #! Feature flags
 analytics: "false"

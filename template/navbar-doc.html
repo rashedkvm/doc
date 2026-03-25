@@ -1,4 +1,6 @@
+{{ if .Page.Host }}
 <ul class="navbar-nav d-none d-md-flex">
-    <li class="breadcrumb-item"><a href="/github.com/{{ .Repo }}@{{ .Tag }}">{{ .Repo }}@{{ .Tag }}</a></li>
-    <li class="breadcrumb-item active" aria-current="page"><a href="#">{{ .Kind }}.{{ .Version }}.{{ .Group }}</a></li>
+    <li class="breadcrumb-item"><a href="/{{ .Page.Host }}/{{ .Page.Repo }}@{{ .Page.Tag }}">{{ .Page.Repo }}@{{ .Page.Tag }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page"><a href="#">{{ .Page.Kind }}.{{ .Page.Version }}.{{ .Page.Group }}</a></li>
 </ul>
+{{ end }}
