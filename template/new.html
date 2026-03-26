@@ -1,5 +1,40 @@
 <div class="content-wrapper">
-    <div class="container">
-        <h2>Oops! Looks like we haven't indexed this version of this repo yet. We are working on that now...</h2>
+    <div class="container text-center" style="margin-top: 20vh;">
+        <i class="fas fa-spinner fa-spin fa-3x" style="color: var(--primary-color);"></i>
+        <h3 class="mt-20">Indexing this repository&hellip;</h3>
+        <p id="index-status" class="text-muted">This page will automatically refresh when indexing is complete.</p>
     </div>
 </div>
+
+{{ template "_scripts" . }}
+<script>
+(function() {
+    var statusUrl = "/_api/status" + window.location.pathname;
+    var interval = 5000;
+    var maxAttempts = 60;
+    var attempts = 0;
+
+    function poll() {
+        attempts++;
+        if (attempts > maxAttempts) {
+            document.getElementById("index-status").textContent =
+                "Indexing is taking longer than expected. Please refresh manually.";
+            return;
+        }
+        fetch(statusUrl)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.indexed) {
+                    window.location.reload();
+                } else {
+                    setTimeout(poll, interval);
+                }
+            })
+            .catch(function() {
+                setTimeout(poll, interval);
+            });
+    }
+
+    setTimeout(poll, interval);
+})();
+</script>

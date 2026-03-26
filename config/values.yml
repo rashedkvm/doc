@@ -41,6 +41,12 @@ providers:
   #!   allowed_orgs:
   #!     - "platform-team"
 
+#! Gateway API settings
+#! Requires Gateway API CRDs and a controller (e.g. cloud-provider-kind for local dev)
+gateway_enabled: false
+gateway_class_name: "cloud-provider-kind"
+gateway_port: 80
+
 #! Feature flags
 analytics: "false"
 is_dev: "true"

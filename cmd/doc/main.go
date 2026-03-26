@@ -117,8 +117,8 @@ type orgData struct {
 }
 
 type homeData struct {
-	Page  pageData
-	Repos []string
+	Page          pageData
+	RepoSummaries []store.RepoSummary
 }
 
 func worker(gitterChan <-chan models.GitterRepo) {
@@ -190,6 +190,8 @@ func start() {
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
+	r.HandleFunc("/_api/status/{host}/{org}/{repo}@{tag}", indexStatus)
+	r.HandleFunc("/_api/status/{host}/{org}/{repo}", indexStatus)
 	r.HandleFunc("/{host}/{org}/{repo}@{tag}", orgHandler)
 	r.HandleFunc("/{host}/{org}/{repo}", orgHandler)
 	r.HandleFunc("/raw/{host}/{org}/{repo}@{tag}", raw)
@@ -203,8 +205,45 @@ func start() {
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
+func indexStatus(w http.ResponseWriter, r *http.Request) {
+	parameters := mux.Vars(r)
+	host := parameters["host"]
+	orgParam := parameters["org"]
+	repoParam := parameters["repo"]
+	tag := parameters["tag"]
+
+	fullRepo := fmt.Sprintf("%s/%s/%s", host, orgParam, repoParam)
+
+	tags, err := db.GetTags(r.Context(), fullRepo)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"indexed": false})
+		return
+	}
+
+	indexed := false
+	if tag == "" && len(tags) > 0 {
+		indexed = true
+	} else {
+		for _, t := range tags {
+			if t == tag {
+				indexed = true
+				break
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"indexed": indexed})
+}
+
 func home(w http.ResponseWriter, r *http.Request) {
 	data := homeData{Page: getPageData(r, "Doc", true)}
+	if summaries, err := db.GetRepoSummaries(r.Context()); err != nil {
+		log.Printf("GetRepoSummaries: %v", err)
+	} else {
+		data.RepoSummaries = summaries
+	}
 	if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")

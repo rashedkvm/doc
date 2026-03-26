@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/crdsdev/doc/pkg/models"
+	"github.com/crdsdev/doc/pkg/store"
 	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 )
@@ -114,6 +115,89 @@ func TestHomeTemplate(t *testing.T) {
 		body := tr.render(t, "home", data)
 		if strings.Contains(body, "googletagmanager.com") {
 			t.Error("expected no analytics script when Analytics is false")
+		}
+	})
+}
+
+func TestHomeTemplateWithRepoSummaries(t *testing.T) {
+	tr := newTestRenderer(t)
+
+	t.Run("renders repo table when summaries present", func(t *testing.T) {
+		data := homeData{
+			Page: pageData{Title: "Doc", DisableNavBar: true},
+			RepoSummaries: []store.RepoSummary{
+				{Repo: "github.com/crossplane/crossplane", CRDCount: 42, LatestTag: "v1.15.0"},
+				{Repo: "github.com/cert-manager/cert-manager", CRDCount: 6, LatestTag: "v1.14.0"},
+			},
+		}
+		body := tr.render(t, "home", data)
+		if !strings.Contains(body, "Previously Indexed Repositories") {
+			t.Error("expected 'Previously Indexed Repositories' heading")
+		}
+		if !strings.Contains(body, `id="repo_list"`) {
+			t.Error("expected repo_list container div")
+		}
+	})
+
+	t.Run("hides repo table when no summaries", func(t *testing.T) {
+		data := homeData{
+			Page: pageData{Title: "Doc", DisableNavBar: true},
+		}
+		body := tr.render(t, "home", data)
+		if strings.Contains(body, "Previously Indexed Repositories") {
+			t.Error("expected no repo table when RepoSummaries is nil")
+		}
+		if strings.Contains(body, `id="repo_list"`) {
+			t.Error("expected no repo_list div when RepoSummaries is nil")
+		}
+	})
+
+	t.Run("renders badge with summary count", func(t *testing.T) {
+		data := homeData{
+			Page: pageData{Title: "Doc", DisableNavBar: true},
+			RepoSummaries: []store.RepoSummary{
+				{Repo: "github.com/org/repo", CRDCount: 5, LatestTag: "v1.0.0"},
+			},
+		}
+		body := tr.render(t, "home", data)
+		if !strings.Contains(body, `<span class="badge badge-primary">1</span>`) {
+			t.Error("expected badge with count 1")
+		}
+	})
+
+	t.Run("toJSON produces valid JSON for RepoSummaries", func(t *testing.T) {
+		data := homeData{
+			Page: pageData{Title: "Doc", DisableNavBar: true},
+			RepoSummaries: []store.RepoSummary{
+				{Repo: "github.com/crossplane/crossplane", CRDCount: 42, LatestTag: "v1.15.0"},
+			},
+		}
+		body := tr.render(t, "home", data)
+
+		marker := `const repos = (`
+		jsonStart := strings.Index(body, marker)
+		if jsonStart == -1 {
+			t.Fatal("could not find repos JSON assignment in home template output")
+		}
+		jsonPayload := body[jsonStart+len(marker):]
+		jsonEnd := strings.Index(jsonPayload, ");")
+		if jsonEnd == -1 {
+			t.Fatal("could not find end of repos JSON assignment")
+		}
+		jsonPayload = strings.TrimSpace(jsonPayload[:jsonEnd])
+
+		var parsed []map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonPayload), &parsed); err != nil {
+			t.Fatalf("toJSON output is not valid JSON: %v\npayload: %s", err, jsonPayload)
+		}
+		if len(parsed) != 1 {
+			t.Fatalf("expected 1 repo summary in JSON, got %d", len(parsed))
+		}
+		if parsed[0]["Repo"] != "github.com/crossplane/crossplane" {
+			t.Errorf("Repo = %v, want github.com/crossplane/crossplane", parsed[0]["Repo"])
+		}
+		if parsed[0]["CRDCount"].(float64) != 42 {
+			t.Errorf("CRDCount = %v, want 42", parsed[0]["CRDCount"])
 		}
 	})
 }

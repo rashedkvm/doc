@@ -93,6 +93,9 @@ func buildProvider(c ProviderConfig, secretResolver func(string) string) (RepoPr
 		token := ""
 		if c.AuthSecret != "" && secretResolver != nil {
 			token = secretResolver(c.AuthSecret)
+			if token == "" {
+				return nil, fmt.Errorf("auth secret %q is empty", c.AuthSecret)
+			}
 		}
 		return GitHubEnterprise{Host: c.Host, Token: token}, nil
 	default:

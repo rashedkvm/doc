@@ -1,0 +1,36 @@
+#@ load("@ytt:data", "data")
+
+#@ if data.values.gateway_enabled:
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: doc-gateway
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+spec:
+  gatewayClassName: #@ data.values.gateway_class_name
+  listeners:
+    - protocol: HTTP
+      port: #@ data.values.gateway_port
+      name: http
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: doc-route
+  namespace: #@ data.values.namespace
+  labels:
+    app: doc
+spec:
+  parentRefs:
+    - name: doc-gateway
+  rules:
+    - backendRefs:
+        - name: doc-service
+          port: #@ data.values.app_port
+#@ end

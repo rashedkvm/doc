@@ -38,6 +38,8 @@ spec:
             - containerPort: 1234
               name: rpc
           env:
+            - name: CONFIG_FILE
+              value: /etc/doc/providers.yml
             - name: DB_DRIVER
               valueFrom:
                 configMapKeyRef:
@@ -73,11 +75,10 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: PG_DB
-            - name: REPOS
-              valueFrom:
-                configMapKeyRef:
-                  name: doc-repos
-                  key: repos
+          volumeMounts:
+            - name: providers
+              mountPath: /etc/doc
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -103,4 +104,8 @@ spec:
               port: 1234
             initialDelaySeconds: 15
             periodSeconds: 20
+      volumes:
+        - name: providers
+          configMap:
+            name: doc-providers
 #@ end

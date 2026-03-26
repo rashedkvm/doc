@@ -76,61 +76,74 @@ PG_USER=postgres PG_PASS=password PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
 
 The application automatically detects PostgreSQL mode when `PG_HOST` is set (even without `DB_DRIVER`).
 
-## Configuration
+## Configuration Reference
 
-All environment-specific settings are managed through a single values file. The default file is `config/values.yml` for local development.
+The application is configured through two complementary mechanisms:
 
-### Key Configuration Values
+1. **Values file** (`config/values.yml`) — the single source of truth for all settings. Used by ytt to generate Kubernetes manifests and by the Go binary to load providers at runtime.
+2. **Environment variables** — consumed directly by the Go binary at runtime. In Kubernetes, these are injected from ConfigMaps and Secrets that ytt generates from the values file.
 
-```yaml
-# Database driver: "sqlite" (default) or "postgres"
-db_driver: "sqlite"
-db_dsn: "/data/doc.db"
+The table below lists every configuration key, where it originates, and where it is consumed.
 
-# Repository host providers
-# By default, only github.com (public) is registered.
-# Add entries to support GitHub Enterprise or other hosts.
-providers:
-  - host: "github.com"
-    type: "github"
-  # - host: "github.mycompany.com"
-  #   type: "github-enterprise"
-  #   auth_secret: "GHE_TOKEN"   # env var name holding the token
+### Environment Variables (consumed by Go code at runtime)
 
-# PostgreSQL settings (only used when db_driver is "postgres")
-dbname: doc
-dbuser: postgres
-dbpwd: password
-dbhost: pgsql-postgresql.postgres.svc.cluster.local
-dbport: "5432"
+| Variable | Default | Go Source | Description |
+|---|---|---|---|
+| `CONFIG_FILE` | _(unset — falls back to github.com only)_ | `cmd/doc/main.go`, `cmd/gitter/main.go` | Path to YAML file containing the `providers` list. In K8s this is mounted from a ConfigMap. |
+| `APP_PORT` | `5000` | `cmd/doc/main.go` | HTTP listen port for the Doc server. |
+| `DB_DRIVER` | `sqlite` | `pkg/store/factory.go` | Database backend: `sqlite` or `postgres`. |
+| `DB_DSN` | `./doc.db` | `pkg/store/factory.go` | SQLite file path or PostgreSQL connection string. |
+| `PG_HOST` | -- | `pkg/store/factory.go` | PostgreSQL host. If set (even without `DB_DRIVER`), triggers legacy postgres auto-detection. |
+| `PG_USER` | -- | `pkg/store/factory.go` | PostgreSQL username (legacy). |
+| `PG_PASS` | -- | `pkg/store/factory.go` | PostgreSQL password (legacy). |
+| `PG_PORT` | -- | `pkg/store/factory.go` | PostgreSQL port (legacy). |
+| `PG_DB` | -- | `pkg/store/factory.go` | PostgreSQL database name (legacy). |
+| `ANALYTICS` | `false` | `cmd/doc/main.go` | Enable Google Analytics (`true`/`false`). |
+| `IS_DEV` | _(unset)_ | `cmd/doc/main.go` | Enable template hot-reload (`true` to enable). |
+| _`<auth_secret>`_ (e.g. `GHE_TOKEN`) | -- | `pkg/provider/config.go` | Token for GitHub Enterprise providers. The name is defined by the `auth_secret` field in the providers config; the value must be an env var. |
 
-# Application settings
-app_port: 5000
-namespace: doc-system
-analytics: "false"
-is_dev: "true"
-```
+### Values File Keys (`config/values.yml`)
 
-### Environment Variables
+The values file is consumed by **ytt** to generate Kubernetes manifests. The `providers` section is also read directly by the Go binary at runtime via `CONFIG_FILE`.
 
-| Variable | Default | Description |
+| Key | Default | Purpose |
 |---|---|---|
-| `CONFIG_FILE` | `config/values.yml` | Path to the YAML values file. The `providers` list is loaded from this file at startup. If unset or the file is missing, only `github.com` (public) is registered. |
-| `APP_PORT` | `5000` | HTTP listen port for the Doc server |
-| `DB_DRIVER` | `sqlite` | Database backend: `sqlite` or `postgres` |
-| `DB_DSN` | `./doc.db` | SQLite file path or PostgreSQL connection string |
-| `PG_USER` | -- | PostgreSQL user (legacy, triggers auto-detection) |
-| `PG_PASS` | -- | PostgreSQL password (legacy) |
-| `PG_HOST` | -- | PostgreSQL host (legacy, if set enables postgres mode) |
-| `PG_PORT` | -- | PostgreSQL port (legacy) |
-| `PG_DB` | -- | PostgreSQL database name (legacy) |
-| `ANALYTICS` | `false` | Enable Google Analytics |
-| `IS_DEV` | `true` | Enable development mode (template reloading) |
-| `GHE_TOKEN` | -- | Token for GitHub Enterprise auth (referenced by `auth_secret` in provider config) |
+| `db_driver` | `sqlite` | Maps to `DB_DRIVER` env var in the ConfigMap. |
+| `db_dsn` | `/data/doc.db` | Maps to `DB_DSN` env var in the ConfigMap. |
+| `app_port` | `5000` | Maps to `APP_PORT` env var; also sets container/service ports. |
+| `namespace` | `doc-system` | Kubernetes namespace for all resources. |
+| `analytics` | `false` | Maps to `ANALYTICS` env var in the ConfigMap. |
+| `is_dev` | `false` | Maps to `IS_DEV` env var in the ConfigMap. |
+| `providers` | `[{host: github.com, type: github}]` | List of Git host providers. Mounted as a ConfigMap file for the Go binary. |
+| `dbname` | `doc` | PostgreSQL database name (maps to `PG_DB`, only when `db_driver` is `postgres`). |
+| `dbuser` | `postgres` | PostgreSQL user (maps to `PG_USER`). |
+| `dbpwd` | `password` | PostgreSQL password (maps to `PG_PASS` via a Secret). |
+| `dbhost` | `pgsql-postgresql.postgres.svc.cluster.local` | PostgreSQL host (maps to `PG_HOST`). |
+| `dbport` | `5432` | PostgreSQL port (maps to `PG_PORT`). |
+| `registry` | `docker.io` | Container image registry prefix. |
+| `image_tag` | `latest` | Container image tag. |
+| `gateway_enabled` | `true` | Include Gateway and HTTPRoute resources in generated manifests. |
+| `gateway_class_name` | `cloud-provider-kind` | GatewayClass name for the Gateway resource. |
+| `gateway_port` | `80` | External listener port on the Gateway. |
+| `image_proxy` | _(empty)_ | Proxy registry URL for pulling base images. |
+| `image_proxy_username` | _(empty)_ | Proxy registry username. |
+| `image_proxy_password` | _(empty)_ | Proxy registry password. |
+
+### How Config Flows
+
+```
+config/values.yml
+    │
+    ├──▶ ytt (make dist) ──▶ ConfigMap doc-config     ──▶ env vars in Pod
+    │                    ──▶ ConfigMap doc-providers   ──▶ mounted file → CONFIG_FILE
+    │                    ──▶ Secret doc-db-secret      ──▶ PG_PASS in Pod
+    │
+    └──▶ make run        ──▶ CONFIG_FILE=$(VALUES_FILE) passed directly to Go binary
+```
 
 ### Passing Sensitive Values
 
-Sensitive values (registry credentials, passwords) are managed via a `.env.local` file that is automatically loaded by the Makefile.
+Sensitive values (registry credentials, passwords, tokens) are managed via a `.env.local` file that is automatically loaded by the Makefile.
 
 1. Create `.env.local` in the project root (this file is gitignored):
 
@@ -140,12 +153,14 @@ IMAGE_PROXY=registry-proxy.example.com
 IMAGE_PROXY_USERNAME=your-username
 IMAGE_PROXY_PASSWORD=your-token
 DB_PASSWORD=your-db-password
+GHE_TOKEN=ghp_xxxxxxxxxxxx
 EOF
 ```
 
-2. Now all make commands automatically pick up these values:
+2. All make commands automatically pick up these values:
 
 ```bash
+make run         # GHE_TOKEN available to the Go binary
 make dist        # Generates manifests with proxy config
 make deploy      # Deploys with all credentials
 ```
@@ -161,43 +176,40 @@ make run-pg
 
 # Override registry and tag for your images
 REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all push-all deploy
+
+# Use a different values file
+VALUES_FILE=config/values-staging.yml make deploy
 ```
 
 ### Repository Providers
 
-The application supports multiple Git hosting platforms through the `RepoProvider` abstraction (`pkg/provider`). At startup, the `providers` list is loaded from the YAML file pointed to by `CONFIG_FILE` (default `config/values.yml`). If the file is missing or contains no providers, only `github.com` (public, no auth) is registered as a fallback.
+The application supports multiple Git hosting platforms through the `RepoProvider` abstraction (`pkg/provider`). At startup, the `providers` list is loaded from the YAML file pointed to by `CONFIG_FILE`. If the file is missing or contains no providers, only `github.com` (public, no auth) is registered as a fallback.
 
 #### Adding GitHub Enterprise
 
 1. Add an entry to `providers` in `config/values.yml`:
 
-   ```yaml
-   providers:
-     - host: "github.com"
-       type: "github"
-     - host: "github.mycompany.com"
-       type: "github-enterprise"
-       auth_secret: "GHE_TOKEN"
-   ```
+```yaml
+providers:
+  - host: "github.com"
+    type: "github"
+  - host: "github.mycompany.com"
+    type: "github-enterprise"
+    auth_secret: "GHE_TOKEN"
+```
 
-2. Set the token as an environment variable (or add it to `.env.local`):
+2. Set the token in `.env.local` (or as an environment variable):
 
-   ```bash
-   export GHE_TOKEN=ghp_xxxxxxxxxxxx
-   ```
+```bash
+echo 'GHE_TOKEN=ghp_xxxxxxxxxxxx' >> .env.local
+```
 
-3. Run the application -- both `github.com` and `github.mycompany.com` repos are now accessible:
+3. Run the application — both hosts are now accessible:
 
-   ```bash
-   make run
-   # Browse to http://localhost:5000/github.mycompany.com/org/repo
-   ```
-
-4. To use a different config file:
-
-   ```bash
-   CONFIG_FILE=config/values-staging.yml make run
-   ```
+```bash
+make run
+# Browse to http://localhost:5000/github.mycompany.com/org/repo
+```
 
 #### URL Format
 
@@ -208,7 +220,6 @@ All routes use the pattern `/{host}/{org}/{repo}`. Existing `github.com/...` URL
 For different environments, create custom values files:
 
 ```bash
-# Copy the default values file
 cp config/values.yml config/values-staging.yml
 
 # Edit with your settings, then use it
@@ -273,6 +284,56 @@ make deploy
 ```bash
 # Deploy database and application
 make deploy-all-pg
+```
+
+### Accessing the Service (Gateway API)
+
+The deployment includes [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) resources (`Gateway` + `HTTPRoute`) to expose the doc service externally. This is enabled by default (`gateway_enabled: true` in values).
+
+#### Local Development with KIND
+
+For local Kubernetes development using [KIND](https://kind.sigs.k8s.io/), install [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) which implements the Gateway API:
+
+```bash
+# Install cloud-provider-kind
+go install sigs.k8s.io/cloud-provider-kind@latest
+
+# Start cloud-provider-kind (keep running in a separate terminal)
+sudo cloud-provider-kind
+```
+
+After deploying, check the Gateway's external IP:
+
+```bash
+kubectl get gateway -n doc-system
+# NAME          CLASS                 ADDRESS        PROGRAMMED   AGE
+# doc-gateway   cloud-provider-kind   192.168.8.5    True         30s
+```
+
+On macOS/Windows, use `--enable-lb-port-mapping` when starting cloud-provider-kind, then access via `localhost` using the mapped port shown in `docker ps`.
+
+#### Disabling the Gateway
+
+If you have your own ingress solution or don't need external access:
+
+```yaml
+# In your values file
+gateway_enabled: false
+```
+
+Or via the command line:
+
+```bash
+ytt ... -v gateway_enabled=false
+```
+
+#### Customizing the GatewayClass
+
+For production deployments with a different Gateway controller (e.g., Contour, Istio, Envoy Gateway):
+
+```yaml
+gateway_class_name: "contour"  # or "istio", "eg", etc.
+gateway_port: 443
 ```
 
 ### Full Release Workflow

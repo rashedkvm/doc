@@ -9,10 +9,12 @@
       "program": "${workspaceFolder}/cmd/doc/main.go",
       "cwd": "${workspaceFolder}",
       "env": {
-        "CONFIG_FILE": "${workspaceFolder}/config/values.yml",
+        "CONFIG_FILE": "${workspaceFolder}/local.values.yml",
         "DB_DRIVER": "sqlite",
         "DB_DSN": "./doc.db",
-        "IS_DEV": "true"
+        "IS_DEV": "true",
+        "APP_PORT": "5010"
+        "GHE_TOKEN": "FIX-ME"
       }
     },
     {
