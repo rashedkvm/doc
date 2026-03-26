@@ -16,7 +16,9 @@ metadata:
     app: doc
   annotations:
     kapp.k14s.io/change-group: app
+    #@ if data.values.db_driver == "postgres":
     kapp.k14s.io/change-rule: "upsert after upserting db"
+    #@ end
 spec:
   replicas: 1
   selector:
@@ -39,6 +41,22 @@ spec:
             - containerPort: #@ data.values.app_port
               name: http
           env:
+            - name: APP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: APP_PORT
+            - name: DB_DRIVER
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: DB_DRIVER
+            - name: DB_DSN
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: DB_DSN
+            #@ if data.values.db_driver == "postgres":
             - name: PG_USER
               valueFrom:
                 configMapKeyRef:
@@ -64,6 +82,9 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: PG_DB
+            - name: GITTER_HOST
+              value: #@ "gitter-service." + data.values.namespace + ".svc.cluster.local:1234"
+            #@ end
             - name: ANALYTICS
               valueFrom:
                 configMapKeyRef:
@@ -74,8 +95,11 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: IS_DEV
-            - name: GITTER_HOST
-              value: #@ "gitter-service." + data.values.namespace + ".svc.cluster.local:1234"
+          #@ if data.values.db_driver == "sqlite":
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          #@ end
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -103,3 +127,8 @@ spec:
               port: #@ data.values.app_port
             initialDelaySeconds: 15
             periodSeconds: 20
+      #@ if data.values.db_driver == "sqlite":
+      volumes:
+        - name: data
+          emptyDir: {}
+      #@ end

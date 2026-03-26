@@ -8,12 +8,18 @@ metadata:
   labels:
     app: doc
 data:
+  DB_DRIVER: #@ data.values.db_driver
+  DB_DSN: #@ data.values.db_dsn
+  #@ if data.values.db_driver == "postgres":
   PG_USER: #@ data.values.dbuser
   PG_HOST: #@ data.values.dbhost
   PG_PORT: #@ data.values.dbport
   PG_DB: #@ data.values.dbname
+  #@ end
+  APP_PORT: #@ str(data.values.app_port)
   ANALYTICS: #@ data.values.analytics
   IS_DEV: #@ data.values.is_dev
+#@ if data.values.db_driver == "postgres":
 ---
 apiVersion: v1
 kind: Secret
@@ -25,6 +31,7 @@ metadata:
 type: Opaque
 stringData:
   password: #@ data.values.dbpwd
+#@ end
 ---
 apiVersion: v1
 kind: ConfigMap

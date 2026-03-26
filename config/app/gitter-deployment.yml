@@ -1,4 +1,8 @@
 #@ load("@ytt:data", "data")
+
+#! The standalone gitter deployment is only needed in postgres mode.
+#! In sqlite mode, the doc binary includes the indexer directly.
+#@ if data.values.db_driver == "postgres":
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -34,6 +38,16 @@ spec:
             - containerPort: 1234
               name: rpc
           env:
+            - name: DB_DRIVER
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: DB_DRIVER
+            - name: DB_DSN
+              valueFrom:
+                configMapKeyRef:
+                  name: doc-config
+                  key: DB_DSN
             - name: PG_USER
               valueFrom:
                 configMapKeyRef:
@@ -89,3 +103,4 @@ spec:
               port: 1234
             initialDelaySeconds: 15
             periodSeconds: 20
+#@ end

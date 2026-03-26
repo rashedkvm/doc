@@ -1,4 +1,7 @@
 #@ load("@ytt:data", "data")
+
+#! The standalone gitter service is only needed in postgres mode.
+#@ if data.values.db_driver == "postgres":
 ---
 apiVersion: v1
 kind: Service
@@ -18,3 +21,4 @@ spec:
       port: 1234
       targetPort: 1234
       name: rpc
+#@ end

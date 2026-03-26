@@ -10,12 +10,36 @@ image_tag: "v1.0.0"
 app_port: 5000
 namespace: doc-system
 
-#! Database connection settings
+#! Database driver: "sqlite" (default, zero-infra) or "postgres" (backward compat)
+db_driver: "sqlite"
+#! DSN: file path for SQLite, connection string for PostgreSQL
+db_dsn: "/data/doc.db"
+
+#! PostgreSQL settings (only used when db_driver is "postgres")
+#! dbname: doc
+#! dbuser: postgres
+#! dbpwd: password
+#! dbhost: pgsql-postgresql.postgres.svc.cluster.local
+#! dbport: "5432"
 dbname: doc
 dbuser: postgres
 dbpwd: password
 dbhost: pgsql-postgresql.postgres.svc.cluster.local
 dbport: "5432"
+
+#! Repository host providers
+#! Each entry registers a Git host. The "github" type requires no auth.
+#! For private GitHub Enterprise instances use type "github-enterprise"
+#! with an auth_secret referencing a K8s secret or env var.
+providers:
+  - host: "github.com"
+    type: "github"
+  #! Example GitHub Enterprise entry:
+  #! - host: "github.mycompany.com"
+  #!   type: "github-enterprise"
+  #!   auth_secret: "ghe-token-secret"
+  #!   allowed_orgs:
+  #!     - "platform-team"
 
 #! Feature flags
 analytics: "false"

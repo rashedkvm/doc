@@ -16,7 +16,7 @@
 <script src="https://unpkg.com/slugify@1.4.6/slugify.js"></script>
 <script src="https://unpkg.com/clipboard@2.0.6/dist/clipboard.min.js"></script>
 <script id="pageData" type="application/json">
-    {{ . }}
+    {{ toJSON . }}
 </script>
 <script type="module">
     const { render } = ReactDOM;
@@ -42,7 +42,8 @@
         }
     })
 
-    const { Kind, Group, Version, Schema } = JSON.parse(document.getElementById('pageData').textContent);
+    const { Page, Schema } = JSON.parse(document.getElementById('pageData').textContent);
+    const { Kind, Group, Version } = Page;
 
     const properties = Schema.Properties;
     if (properties?.apiVersion) delete properties.apiVersion;

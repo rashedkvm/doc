@@ -1,0 +1,260 @@
+/*
+Copyright 2020 The CRDS Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package indexer
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path"
+	"regexp"
+	"strings"
+
+	"github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
+	"github.com/crdsdev/doc/pkg/provider"
+	"github.com/crdsdev/doc/pkg/store"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"gopkg.in/square/go-jose.v2/json"
+	yaml "gopkg.in/yaml.v3"
+)
+
+type gitTag struct {
+	hash plumbing.Hash
+	name string
+}
+
+// Indexer clones git repositories and indexes their CRD definitions into a Store.
+type Indexer struct {
+	store    store.Store
+	registry *provider.Registry
+}
+
+// New creates an Indexer backed by the given Store and provider Registry.
+func New(s store.Store, reg *provider.Registry) *Indexer {
+	return &Indexer{store: s, registry: reg}
+}
+
+// Index clones the repository identified by gRepo, discovers CRDs across its
+// tags, and persists them via the Store.
+func (idx *Indexer) Index(ctx context.Context, gRepo models.GitterRepo) error {
+	host := gRepo.Host
+	if host == "" {
+		host = "github.com"
+	}
+	log.Printf("Indexing repo %s/%s/%s...\n", host, gRepo.Org, gRepo.Repo)
+
+	prov, err := idx.registry.Resolve(host)
+	if err != nil {
+		return fmt.Errorf("resolving provider for %s: %w", host, err)
+	}
+
+	dir, err := os.MkdirTemp(os.TempDir(), "doc-gitter")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+
+	orgLower := strings.ToLower(gRepo.Org)
+	repoLower := strings.ToLower(gRepo.Repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", host, orgLower, repoLower)
+	cloneOpts := &git.CloneOptions{
+		URL:               prov.CloneURL(orgLower, repoLower),
+		Auth:              prov.Auth(),
+		Depth:             1,
+		Progress:          os.Stdout,
+		RecurseSubmodules: git.NoRecurseSubmodules,
+	}
+	if gRepo.Tag != "" {
+		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(gRepo.Tag)
+		cloneOpts.SingleBranch = true
+	}
+	repo, err := git.PlainClone(dir, false, cloneOpts)
+	if err != nil {
+		return err
+	}
+	iter, err := repo.Tags()
+	if err != nil {
+		return err
+	}
+	w, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	var tags []gitTag
+	if err := iter.ForEach(func(obj *plumbing.Reference) error {
+		if gRepo.Tag == "" {
+			tags = append(tags, gitTag{
+				hash: obj.Hash(),
+				name: obj.Name().Short(),
+			})
+			return nil
+		}
+		if obj.Name().Short() == gRepo.Tag {
+			tags = append(tags, gitTag{
+				hash: obj.Hash(),
+				name: obj.Name().Short(),
+			})
+			iter.Close()
+		}
+		return nil
+	}); err != nil {
+		log.Println(err)
+	}
+
+	for _, t := range tags {
+		h, err := repo.ResolveRevision(plumbing.Revision(t.hash.String()))
+		if err != nil || h == nil {
+			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
+			continue
+		}
+		c, err := repo.CommitObject(*h)
+		if err != nil || c == nil {
+			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
+			continue
+		}
+
+		tagID, err := idx.store.UpsertTag(ctx, t.name, fullRepo, c.Committer.When)
+		if err != nil {
+			return err
+		}
+
+		repoCRDs, err := getCRDsFromTag(dir, t.name, h, w)
+		if err != nil {
+			log.Printf("Unable to get CRDs: %s@%s (%v)", fullRepo, t.name, err)
+			continue
+		}
+
+		if len(repoCRDs) > 0 {
+			inserts := make([]store.CRDInsert, 0, len(repoCRDs))
+			for _, rc := range repoCRDs {
+				inserts = append(inserts, store.CRDInsert{
+					Group:    rc.Group,
+					Version:  rc.Version,
+					Kind:     rc.Kind,
+					TagID:    tagID,
+					Filename: rc.Filename,
+					Data:     rc.CRD,
+				})
+			}
+			if err := idx.store.InsertCRDs(ctx, inserts); err != nil {
+				return err
+			}
+		}
+	}
+
+	log.Printf("Finished indexing %s/%s\n", gRepo.Org, gRepo.Repo)
+	return nil
+}
+
+func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]models.RepoCRD, error) {
+	err := w.Checkout(&git.CheckoutOptions{
+		Hash:  *hash,
+		Force: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := w.Reset(&git.ResetOptions{
+		Mode: git.HardReset,
+	}); err != nil {
+		return nil, err
+	}
+	reg := regexp.MustCompile("kind: CustomResourceDefinition")
+	regPath := regexp.MustCompile(`^.*\.yaml`)
+	g, _ := w.Grep(&git.GrepOptions{
+		Patterns:  []*regexp.Regexp{reg},
+		PathSpecs: []*regexp.Regexp{regPath},
+	})
+	repoCRDs := map[string]models.RepoCRD{}
+	files := getYAMLs(g, dir)
+	for file, yamls := range files {
+		for _, y := range yamls {
+			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
+			if err != nil || crder.CRD == nil {
+				continue
+			}
+			cbytes, err := json.Marshal(crder.CRD)
+			if err != nil {
+				continue
+			}
+			repoCRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
+				Path:     crd.PrettyGVK(crder.GVK),
+				Filename: path.Base(file),
+				Group:    crder.GVK.Group,
+				Version:  crder.GVK.Version,
+				Kind:     crder.GVK.Kind,
+				CRD:      cbytes,
+			}
+		}
+	}
+	return repoCRDs, nil
+}
+
+func getYAMLs(greps []git.GrepResult, dir string) map[string][][]byte {
+	allCRDs := map[string][][]byte{}
+	for _, res := range greps {
+		b, err := os.ReadFile(dir + "/" + res.FileName)
+		if err != nil {
+			log.Printf("failed to read CRD file: %s", res.FileName)
+			continue
+		}
+		yamls, err := splitYAML(b, res.FileName)
+		if err != nil {
+			log.Printf("failed to split/parse CRD file: %s", res.FileName)
+			continue
+		}
+		allCRDs[res.FileName] = yamls
+	}
+	return allCRDs
+}
+
+func splitYAML(file []byte, filename string) ([][]byte, error) {
+	var yamls [][]byte
+	var err error
+	defer func() {
+		if r := recover(); r != nil {
+			yamls = make([][]byte, 0)
+			err = fmt.Errorf("panic while processing yaml file: %s", r)
+		}
+	}()
+
+	decoder := yaml.NewDecoder(bytes.NewReader(file))
+	for {
+		var node map[string]interface{}
+		decErr := decoder.Decode(&node)
+		if decErr == io.EOF {
+			break
+		}
+		if decErr != nil {
+			log.Printf("failed to decode part of CRD file: %s\n%s", filename, decErr)
+			continue
+		}
+		doc, marshalErr := yaml.Marshal(node)
+		if marshalErr != nil {
+			log.Printf("failed to encode part of CRD file: %s\n%s", filename, marshalErr)
+			continue
+		}
+		yamls = append(yamls, doc)
+	}
+	return yamls, err
+}

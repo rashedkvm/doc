@@ -28,6 +28,9 @@ IMAGE_PROXY_USERNAME ?=
 IMAGE_PROXY_PASSWORD ?=
 DB_PASSWORD ?=
 
+# Database driver: "sqlite" (default, zero-infra) or "postgres" (backward compat)
+DB_DRIVER ?= sqlite
+
 # ytt arguments for injecting environment variable overrides
 YTT_ENV_ARGS = $(if $(IMAGE_PROXY),-v image_proxy=$(IMAGE_PROXY)) \
                $(if $(IMAGE_PROXY_USERNAME),-v image_proxy_username=$(IMAGE_PROXY_USERNAME)) \
@@ -41,7 +44,7 @@ build-doc: ## Build doc Docker image
 	docker build . -f deploy/doc.Dockerfile -t $(DOC_IMAGE)
 
 .PHONY: build-gitter
-build-gitter: ## Build gitter Docker image
+build-gitter: ## Build gitter Docker image (only needed for postgres mode)
 	docker build . -f deploy/gitter.Dockerfile -t $(GITTER_IMAGE)
 
 .PHONY: build-all
@@ -76,7 +79,7 @@ tidy: ## Run go mod tidy
 test: fmt vet ## Run tests
 	go test ./... -short -coverprofile cover.out
 
-##@ Database
+##@ Database (PostgreSQL mode only)
 
 .PHONY: db-gen
 db-gen: ## Generate PostgreSQL deployment manifest from Helm chart
@@ -115,22 +118,38 @@ undeploy: ## Remove doc application from the K8s cluster
 	kapp delete -a doc -n kube-public $(KAPP_ARGS)
 
 .PHONY: deploy-all
-deploy-all: db-deploy deploy ## Deploy database and application
+deploy-all: deploy ## Deploy application (SQLite mode, no database needed)
+
+.PHONY: deploy-all-pg
+deploy-all-pg: db-deploy deploy ## Deploy database and application (PostgreSQL mode)
 
 .PHONY: undeploy-all
-undeploy-all: undeploy db-undeploy ## Remove application and database
+undeploy-all: undeploy ## Remove application
+
+.PHONY: undeploy-all-pg
+undeploy-all-pg: undeploy db-undeploy ## Remove application and database (PostgreSQL mode)
 
 .PHONY: release
 release: build-all push-all deploy ## Build, push, and deploy (full workflow)
 
 ##@ Local Development
 
+APP_PORT ?= 5000
 POSTGRES_CONTAINER_NAME ?= doc-postgres
 POSTGRES_PASSWORD ?= password
 POSTGRES_PORT ?= 5432
 
+.PHONY: run
+run: ## Run the doc application locally (SQLite mode, providers from config)
+	CONFIG_FILE=$(VALUES_FILE) DB_DRIVER=sqlite DB_DSN=./doc.db go run ./cmd/doc/main.go
+
+.PHONY: run-pg
+run-pg: ## Run the doc application locally (PostgreSQL mode)
+	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
+		go run ./cmd/doc/main.go
+
 .PHONY: run-db
-run-db: ## Run PostgreSQL in a local container
+run-db: ## Run PostgreSQL in a local container (postgres mode only)
 	@docker stop $(POSTGRES_CONTAINER_NAME) > /dev/null 2>&1 || true
 	@docker rm $(POSTGRES_CONTAINER_NAME) > /dev/null 2>&1 || true
 	docker run --name $(POSTGRES_CONTAINER_NAME) \
@@ -146,26 +165,30 @@ clean-db: ## Stop and remove local PostgreSQL container
 	@echo "PostgreSQL container removed."
 
 .PHONY: init-db
-init-db: ## Initialize the database schema
+init-db: ## Initialize the PostgreSQL database schema
 	@echo "Waiting for PostgreSQL to be ready..."
 	@sleep 3
 	PGPASSWORD=$(POSTGRES_PASSWORD) psql -h 127.0.0.1 -U postgres -d postgres -a -f schema/crds_up.sql
 
-.PHONY: run
-run: ## Run the doc application locally
-	PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
-		go run ./cmd/doc/main.go
-
 .PHONY: run-gitter
-run-gitter: ## Run the gitter application locally
-	PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
+run-gitter: ## Run standalone gitter locally (postgres mode only)
+	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
 		go run ./cmd/gitter/main.go
 
-.PHONY: sandbox
-sandbox: run-db init-db run-gitter run ## Run the doc and gitter applications locally
+.PHONY: run-ghe
+run-ghe: ## Run locally with a GitHub Enterprise provider (providers loaded from config)
+	CONFIG_FILE=$(VALUES_FILE) DB_DRIVER=sqlite DB_DSN=./doc.db go run ./cmd/doc/main.go
 
-.PHONY: clean-sandbox
-clean-sandbox: clean-db clean-gitter clean ## Clean the doc and gitter applications locally
+.PHONY: sandbox
+sandbox: run ## Run the doc application locally with SQLite (zero dependencies)
+
+.PHONY: sandbox-pg
+sandbox-pg: run-db init-db ## Run full stack locally with PostgreSQL
+	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
+		go run ./cmd/gitter/main.go &
+	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
+		go run ./cmd/doc/main.go
+
 
 .PHONY: clean-gitter
 clean-gitter: ## Clean the local gitter application
@@ -173,9 +196,16 @@ clean-gitter: ## Clean the local gitter application
 	-pkill -f "go run cmd/gitter/main.go" 2>/dev/null || true
 
 .PHONY: clean
-clean: ## Clean the local doc application
-	-kill $$(lsof -t -i :5000) 2>/dev/null || true
+clean: ## Clean the local doc application and local SQLite file
+	-kill $$(lsof -t -i :$(APP_PORT)) 2>/dev/null || true
 	-pkill -f "go run cmd/doc/main.go" 2>/dev/null || true
+	-rm -f doc.db 2>/dev/null || true
+
+.PHONY: clean-sandbox
+clean-sandbox: clean ## Clean all local resources (SQLite mode)
+
+.PHONY: clean-sandbox-pg
+clean-sandbox-pg: clean-db clean-gitter clean ## Clean all local resources (PostgreSQL mode)
 
 ##@ Help
 

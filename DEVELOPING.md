@@ -1,6 +1,15 @@
 # Developing
 
-## Quick Start
+## Quick Start (SQLite -- Zero Dependencies)
+
+```bash
+# Run the application (no database setup needed)
+make run
+```
+
+That's it. The doc server starts with an embedded SQLite database at `./doc.db`. The schema is auto-applied at startup. CRD data is indexed on demand when users browse repositories.
+
+## Quick Start (PostgreSQL -- Backward Compatible)
 
 ```bash
 # 1. Set up credentials (one-time, file is gitignored)
@@ -13,47 +22,111 @@ EOF
 # 2. Build and push images
 REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all push-all
 
-# 3. Generate manifests and deploy
-REGISTRY=your-registry IMAGE_TAG=v1.0.0 make deploy-all
+# 3. Generate manifests and deploy (PostgreSQL mode)
+REGISTRY=your-registry IMAGE_TAG=v1.0.0 make deploy-all-pg
 ```
 
 ## Prerequisites
 
-- Go 1.23+
-- Docker
-- kubectl configured with a Kubernetes cluster
-- [Carvel tools](https://carvel.dev/) (ytt, kapp, kbld)
-- Helm 3.x
+- Go 1.24+
+- Docker (only for PostgreSQL mode or building container images)
+- kubectl configured with a Kubernetes cluster (for deployment)
+- [Carvel tools](https://carvel.dev/) (ytt, kapp, kbld) (for Kubernetes deployment)
+- Helm 3.x (only for PostgreSQL mode)
+
+## Database Backends
+
+The application supports two database backends, selected via the `DB_DRIVER` environment variable:
+
+| Mode | DB_DRIVER | Infrastructure Required | Data Persistence |
+|---|---|---|---|
+| **SQLite (default)** | `sqlite` | None | Ephemeral (lost on restart) |
+| **PostgreSQL** | `postgres` | PostgreSQL server | Persistent |
+
+### SQLite Mode (Default)
+
+No external database needed. The SQLite database file is created automatically and the schema is applied at startup.
+
+```bash
+# Local development
+make run
+
+# Or explicitly
+DB_DRIVER=sqlite DB_DSN=./doc.db go run ./cmd/doc/main.go
+```
+
+### PostgreSQL Mode
+
+For backward compatibility with existing deployments.
+
+```bash
+# Start PostgreSQL
+make run-db
+
+# Initialize schema
+make init-db
+
+# Run with PostgreSQL
+make run-pg
+
+# Or using PG_* env vars (auto-detected)
+PG_USER=postgres PG_PASS=password PG_HOST=127.0.0.1 PG_PORT=5432 PG_DB=doc \
+    go run ./cmd/doc/main.go
+```
+
+The application automatically detects PostgreSQL mode when `PG_HOST` is set (even without `DB_DRIVER`).
 
 ## Configuration
 
 All environment-specific settings are managed through a single values file. The default file is `config/values.yml` for local development.
 
-### Values File Structure
-
-The `config/values.yml` file contains non-sensitive configuration:
+### Key Configuration Values
 
 ```yaml
-# Registry and image settings (can be overridden via env vars)
-registry: "docker.io"
-image_tag: "latest"
+# Database driver: "sqlite" (default) or "postgres"
+db_driver: "sqlite"
+db_dsn: "/data/doc.db"
 
-# Application settings
-app_port: 5000
-namespace: doc-system
+# Repository host providers
+# By default, only github.com (public) is registered.
+# Add entries to support GitHub Enterprise or other hosts.
+providers:
+  - host: "github.com"
+    type: "github"
+  # - host: "github.mycompany.com"
+  #   type: "github-enterprise"
+  #   auth_secret: "GHE_TOKEN"   # env var name holding the token
 
-# Database connection settings
+# PostgreSQL settings (only used when db_driver is "postgres")
 dbname: doc
 dbuser: postgres
 dbpwd: password
 dbhost: pgsql-postgresql.postgres.svc.cluster.local
+dbport: "5432"
 
-# Feature flags
+# Application settings
+app_port: 5000
+namespace: doc-system
 analytics: "false"
 is_dev: "true"
 ```
 
-**Note:** The `registry` and `image_tag` values are used as defaults. Override them via environment variables: `REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all`
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIG_FILE` | `config/values.yml` | Path to the YAML values file. The `providers` list is loaded from this file at startup. If unset or the file is missing, only `github.com` (public) is registered. |
+| `APP_PORT` | `5000` | HTTP listen port for the Doc server |
+| `DB_DRIVER` | `sqlite` | Database backend: `sqlite` or `postgres` |
+| `DB_DSN` | `./doc.db` | SQLite file path or PostgreSQL connection string |
+| `PG_USER` | -- | PostgreSQL user (legacy, triggers auto-detection) |
+| `PG_PASS` | -- | PostgreSQL password (legacy) |
+| `PG_HOST` | -- | PostgreSQL host (legacy, if set enables postgres mode) |
+| `PG_PORT` | -- | PostgreSQL port (legacy) |
+| `PG_DB` | -- | PostgreSQL database name (legacy) |
+| `ANALYTICS` | `false` | Enable Google Analytics |
+| `IS_DEV` | `true` | Enable development mode (template reloading) |
+| `GHE_TOKEN` | -- | Token for GitHub Enterprise auth (referenced by `auth_secret` in provider config) |
 
 ### Passing Sensitive Values
 
@@ -74,25 +147,61 @@ EOF
 
 ```bash
 make dist        # Generates manifests with proxy config
-make db-gen      # Generates database manifests with proxy config
-make deploy-all  # Deploys with all credentials
-```
-
-You can also pass values directly on the command line (overrides `.env.local`):
-
-```bash
-IMAGE_PROXY_USERNAME=myuser IMAGE_PROXY_PASSWORD=mytoken make deploy
+make deploy      # Deploys with all credentials
 ```
 
 ### Using Different Environments
 
 ```bash
-# Local development (default - uses config/values.yml)
-make deploy
+# Local development - SQLite (default)
+make run
+
+# Local development - PostgreSQL
+make run-pg
 
 # Override registry and tag for your images
 REGISTRY=your-registry IMAGE_TAG=v1.0.0 make build-all push-all deploy
 ```
+
+### Repository Providers
+
+The application supports multiple Git hosting platforms through the `RepoProvider` abstraction (`pkg/provider`). At startup, the `providers` list is loaded from the YAML file pointed to by `CONFIG_FILE` (default `config/values.yml`). If the file is missing or contains no providers, only `github.com` (public, no auth) is registered as a fallback.
+
+#### Adding GitHub Enterprise
+
+1. Add an entry to `providers` in `config/values.yml`:
+
+   ```yaml
+   providers:
+     - host: "github.com"
+       type: "github"
+     - host: "github.mycompany.com"
+       type: "github-enterprise"
+       auth_secret: "GHE_TOKEN"
+   ```
+
+2. Set the token as an environment variable (or add it to `.env.local`):
+
+   ```bash
+   export GHE_TOKEN=ghp_xxxxxxxxxxxx
+   ```
+
+3. Run the application -- both `github.com` and `github.mycompany.com` repos are now accessible:
+
+   ```bash
+   make run
+   # Browse to http://localhost:5000/github.mycompany.com/org/repo
+   ```
+
+4. To use a different config file:
+
+   ```bash
+   CONFIG_FILE=config/values-staging.yml make run
+   ```
+
+#### URL Format
+
+All routes use the pattern `/{host}/{org}/{repo}`. Existing `github.com/...` URLs continue to work unchanged.
 
 ### Custom Values Files
 
@@ -110,26 +219,33 @@ VALUES_FILE=config/values-staging.yml make deploy
 
 ## Local Development
 
-### Using Postgres Docker Image
-
-The easiest way to get started developing locally is with the official Postgres Docker image.
-
-1. Start PostgreSQL container:
+### SQLite Mode (Recommended)
 
 ```bash
-make run-db
-```
-
-2. Initialize the database schema:
-
-```bash
-make init-db
-```
-
-3. Run the application:
-
-```bash
+# Start the application (schema auto-applied, zero setup)
 make run
+
+# Clean up
+make clean
+```
+
+### PostgreSQL Mode
+
+```bash
+# Start PostgreSQL container
+make run-db
+
+# Initialize the database schema
+make init-db
+
+# Run the application
+make run-pg
+
+# Optionally run standalone gitter (backward compat)
+make run-gitter
+
+# Clean up
+make clean-sandbox-pg
 ```
 
 ### Available Make Targets
@@ -141,37 +257,25 @@ Run `make help` to see all available targets.
 ### Build and Push Docker Images
 
 ```bash
-# Build images
 make build-all
-
-# Push to registry
 make push-all
-
-# Or do both
-make build-all push-all
 ```
 
-### Deploy PostgreSQL Database
+### Deploy (SQLite Mode -- Default)
 
 ```bash
-make db-deploy
-```
-
-### Deploy Application
-
-```bash
+# Deploy application only (no database needed)
 make deploy
 ```
 
-### Deploy Everything
+### Deploy (PostgreSQL Mode)
 
 ```bash
-make deploy-all
+# Deploy database and application
+make deploy-all-pg
 ```
 
 ### Full Release Workflow
-
-Build, push, and deploy in one command:
 
 ```bash
 # Uses default registry from config/values.yml
@@ -182,8 +286,6 @@ REGISTRY=your-registry IMAGE_TAG=v1.0.0 make release
 ```
 
 ### Using an Image Registry Proxy
-
-The image proxy is used for pulling base images (e.g., PostgreSQL) through a mirror to avoid Docker Hub rate limits.
 
 1. Add proxy credentials to `.env.local`:
    ```bash
@@ -197,7 +299,3 @@ The image proxy is used for pulling base images (e.g., PostgreSQL) through a mir
    make dist      # App manifests include imagePullSecrets
    make db-gen    # Database manifests use proxy for PostgreSQL image
    ```
-
-When proxy variables are set, the generated manifests will include:
-- A `registry-credentials` Secret with dockerconfigjson for the proxy
-- `imagePullSecrets` on all Deployments and StatefulSets
