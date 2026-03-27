@@ -4,9 +4,6 @@ dist/
 # Local environment file for secrets (used by Makefile)
 .env.local
 
-# Build artifacts
-/doc
-/gitter
 
 # IDE and editor files
 .idea
@@ -23,6 +20,3 @@ data/doc.db
 cover.out
 
 .env.local
-local.values.yml
-.DS_Store
-manifest.yml

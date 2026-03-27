@@ -30,6 +30,11 @@ providers:
   - host: "github.com"
     type: "github"
 
+#! Gateway API settings
+gateway_enabled: true
+gateway_class_name: "cloud-provider-kind"
+gateway_port: 80
+
 #! Feature flags
 analytics: "false"
 is_dev: "false"

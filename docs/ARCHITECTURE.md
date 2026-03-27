@@ -87,7 +87,7 @@ Template data structs share a common `pageData` base that carries both layout fl
 
 | Responsibility | Details |
 |---|---|
-| Serve home page | `GET /` -- renders the landing page (note: the `Repos` field in the template data is currently not populated from the Store) |
+| Serve home page | `GET /` -- renders the landing page with a search bar and, when indexed repos exist, a filterable table of previously indexed repositories (repo name, CRD count, latest tag) loaded via `Store.GetRepoSummaries()` |
 | Serve org/repo page | `GET /{host}/{org}/{repo}[@{tag}]` -- lists all CRDs for a repo at a given tag |
 | Serve CRD doc page | `PathPrefix("/")` catch-all -- parses `/{host}/{org}/{repo}/{group}/{version}/{kind}[@{tag}]` via `parseRepoURL()` and renders the OpenAPI v3 schema for a specific CRD |
 | Serve raw CRDs | `GET /raw/{host}/{org}/{repo}[@{tag}]` -- returns raw YAML of all CRDs |
@@ -141,6 +141,7 @@ classDiagram
         +GetRawCRDs(ctx, repo, tag) "[][]byte, error"
         +GetTags(ctx, repo) "[]string, error"
         +GetRepos(ctx) "[]string, error"
+        +GetRepoSummaries(ctx) "[]RepoSummary, error"
         +UpsertTag(ctx, name, repo, timestamp) "int, error"
         +InsertCRDs(ctx, crds) error
         +Close() error
@@ -260,6 +261,11 @@ classDiagram
             +Filename string
             +Data []byte
         }
+        class RepoSummary {
+            +Repo string
+            +CRDCount int
+            +LatestTag string
+        }
     }
 
     namespace pkgProvider ["pkg/provider"] {
@@ -327,6 +333,7 @@ classDiagram
 | `Store` | `pkg/store` | Interface abstracting all database read/write operations |
 | `CRDRow` | `pkg/store` | Read result from database queries |
 | `CRDInsert` | `pkg/store` | Write payload for batch CRD inserts |
+| `RepoSummary` | `pkg/store` | Aggregate info (repo path, CRD count, latest tag) for the home page listing |
 | `RepoCRD` | `pkg/models` | Represents a single CRD extracted from a repo |
 | `GitterRepo` | `pkg/models` | Identifies which host/repo/tag to index |
 | `Indexer` | `pkg/indexer` | Resolves provider, clones repos, parses CRDs, writes to Store |
@@ -435,7 +442,8 @@ doc/
 ├── cmd/
 │   ├── doc/              # Doc web server + indexer (main binary)
 │   │   ├── main.go
-│   │   └── parse_test.go
+│   │   ├── parse_test.go
+│   │   └── template_test.go
 │   └── gitter/           # Standalone gitter (backward compat, optional)
 │       └── main.go
 ├── pkg/
@@ -446,6 +454,7 @@ doc/
 │   ├── store/            # Database abstraction layer
 │   │   ├── store.go      # Store interface + shared types
 │   │   ├── sqlite.go     # SQLite implementation
+│   │   ├── sqlite_test.go # SQLite store tests
 │   │   ├── postgres.go   # PostgreSQL implementation
 │   │   └── factory.go    # NewFromEnv() factory
 │   ├── indexer/          # CRD indexing engine
@@ -559,4 +568,7 @@ To support a non-GitHub host (e.g. GitLab, Bitbucket), implement the `RepoProvid
 
 ## Proposed Improvements
 
-_No outstanding proposals at this time._
+- **Search-as-you-type autocomplete**: Integrate the home page repo listing into the search bar as an autocomplete dropdown, so users see matching indexed repos as they type.
+- **Staleness indicator**: Show when each repo was last indexed (from `tags.time`) and offer a "re-index" button for stale entries.
+- **Grouped by org**: Group repos by `{host}/{org}` with collapsible sections for better organization at scale.
+- **Async loading**: Add a `GET /api/repos` JSON endpoint so the repo list can be loaded asynchronously, avoiding increased page load time when the DB is large.

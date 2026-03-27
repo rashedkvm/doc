@@ -141,11 +141,11 @@ POSTGRES_PORT ?= 5432
 
 .PHONY: run
 run: ## Run the doc application locally (SQLite mode, providers from config)
-	CONFIG_FILE=$(VALUES_FILE) DB_DRIVER=sqlite DB_DSN=./doc.db go run ./cmd/doc/main.go
+	CONFIG_FILE=$(VALUES_FILE) DB_DRIVER=sqlite DB_DSN=./doc.db APP_PORT=$(APP_PORT) go run ./cmd/doc/main.go
 
 .PHONY: run-pg
 run-pg: ## Run the doc application locally (PostgreSQL mode)
-	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
+	CONFIG_FILE=$(VALUES_FILE) APP_PORT=$(APP_PORT) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
 		go run ./cmd/doc/main.go
 
 .PHONY: run-db
@@ -174,10 +174,6 @@ init-db: ## Initialize the PostgreSQL database schema
 run-gitter: ## Run standalone gitter locally (postgres mode only)
 	CONFIG_FILE=$(VALUES_FILE) PG_USER=postgres PG_PASS=$(POSTGRES_PASSWORD) PG_HOST=127.0.0.1 PG_PORT=$(POSTGRES_PORT) PG_DB=doc \
 		go run ./cmd/gitter/main.go
-
-.PHONY: run-ghe
-run-ghe: ## Run locally with a GitHub Enterprise provider (providers loaded from config)
-	CONFIG_FILE=$(VALUES_FILE) DB_DRIVER=sqlite DB_DSN=./doc.db go run ./cmd/doc/main.go
 
 .PHONY: sandbox
 sandbox: run ## Run the doc application locally with SQLite (zero dependencies)

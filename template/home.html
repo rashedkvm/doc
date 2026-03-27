@@ -6,11 +6,17 @@
     <div class="container mt-md-20">
         <div class="content hero">
             <h1 class="text-center site-title">doc.crds.dev</h1>
-            <div id="repo_go"></div>
             <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
+            <div id="repo_go"></div>
         </div>
         <p>To find a repo, search <kbd>{host}/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest indexed tag will be served.</p>
     </div>
+
+    {{ if .RepoSummaries }}
+    <div class="container mt-20">
+        <div id="repo_list"></div>
+    </div>
+    {{ end }}
 </div>
 
 {{ template "_scripts" . }}
@@ -58,6 +64,104 @@
     render(html`<${RepoGo} />`, document.getElementById("repo_go"));
 </script>
 
+{{ if .RepoSummaries }}
+<script src="https://unpkg.com/react-table@7/dist/react-table.production.min.js"></script>
+<script type="module">
+    const { render } = ReactDOM;
+    const { useState } = React;
+    const { html } = htmReact;
+    const { useTable, useSortBy, useGlobalFilter } = ReactTable;
+
+    const repos = ({{ toJSON .RepoSummaries }});
+    const INITIAL_LIMIT = 10;
+
+    const columns = [
+        {
+            Header: 'Repository',
+            accessor: 'Repo',
+            Cell: ({ value }) => html`<a href=${`/${value}`}>${value}</a>`
+        },
+        {
+            Header: 'CRDs',
+            accessor: 'CRDCount',
+            Cell: ({ value }) => html`<span class="badge badge-primary">${value}</span>`
+        },
+        {
+            Header: 'Latest Tag',
+            accessor: 'LatestTag',
+            Cell: ({ row: { original }, value }) => html`<a href=${`/${original.Repo}@${value}`}><span class="badge">${value}</span></a>`
+        }
+    ];
+
+    function RepoHeader(column) {
+        return html`<th ...${column.getHeaderProps(column.getSortByToggleProps())}>
+        ${column.render('Header')}
+            <span class="sort-header ${column.isSorted ? 'sort-header-active' : ''}">
+            ${(column.isSorted
+                ? column.isSortedDesc
+                    ? html`<i class="fas fa-sort-down"></i>`
+                    : html`<i class="fas fa-sort-up"></i>`
+                : html`<i class="fas fa-sort"></i>`)}
+            </span>
+        </th>`
+    }
+
+    function RepoTable() {
+        const [showAll, setShowAll] = useState(false);
+        const table = useTable({ columns, data: repos }, useGlobalFilter, useSortBy);
+        const {
+            getTableProps,
+            getTableBodyProps,
+            headerGroups,
+            rows,
+            prepareRow,
+            setGlobalFilter,
+            state: { globalFilter }
+        } = table;
+
+        const visibleRows = showAll || globalFilter ? rows : rows.slice(0, INITIAL_LIMIT);
+
+        return html`
+        <div class="d-flex align-items-center justify-content-between flex-wrap mb-md-10 mb-5">
+            <h2 class="mb-0">Previously Indexed Repositories <span class="badge badge-primary">${repos.length}</span></h2>
+            <form class="form-inline w-md-400 w-sm-full mt-sm-10" onSubmit=${e => e.preventDefault()}>
+                <input type="search" class="form-control" placeholder="Filter repositories..." onInput=${e => setGlobalFilter(e.target.value)} value=${globalFilter || ''} />
+            </form>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-outer-bordered" ...${getTableProps()}>
+                <thead>
+                    ${headerGroups.map(group => html`
+                    <tr ...${group.getHeaderGroupProps()}>
+                        ${group.headers.map(RepoHeader)}
+                    </tr>
+                    `)}
+                </thead>
+                <tbody ...${getTableBodyProps()}>
+                    ${visibleRows.map(row => {
+                        prepareRow(row)
+                        return html`
+                        <tr ...${row.getRowProps()}>
+                            ${row.cells.map(cell => html`
+                            <td ...${cell.getCellProps()}>${cell.render('Cell')}</td>
+                            `)}
+                        </tr>
+                        `
+                    })}
+                </tbody>
+            </table>
+        </div>
+        ${!globalFilter && rows.length > INITIAL_LIMIT && html`
+            <button class="btn btn-link mt-5" onClick=${() => setShowAll(!showAll)}>
+                ${showAll ? 'Show fewer' : `Show all (${rows.length})`}
+            </button>
+        `}`;
+    }
+
+    render(html`<${RepoTable} />`, document.getElementById("repo_list"));
+</script>
+{{ end }}
+
 <style>
     .home-page .hero {
         margin-top: 10vh;
@@ -76,6 +180,14 @@
 
     .home-page .org-link {
         font-size: 2rem;
+    }
+
+    #repo_list .sort-header {
+        margin-left: 1rem;
+    }
+
+    #repo_list .sort-header:not(.sort-header-active) {
+        opacity: 0.5;
     }
 
     @media screen and (max-width: 575px) {

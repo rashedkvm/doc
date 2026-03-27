@@ -44,6 +44,9 @@ type Store interface {
 	// GetRepos returns all distinct repo paths that have been indexed.
 	GetRepos(ctx context.Context) ([]string, error)
 
+	// GetRepoSummaries returns aggregate info (CRD count, latest tag) for every indexed repo.
+	GetRepoSummaries(ctx context.Context) ([]RepoSummary, error)
+
 	// UpsertTag inserts a tag if it doesn't exist, or returns the existing ID.
 	// Returns the tag ID.
 	UpsertTag(ctx context.Context, name, repo string, timestamp time.Time) (int, error)
@@ -53,6 +56,13 @@ type Store interface {
 
 	// Close releases any resources held by the store.
 	Close() error
+}
+
+// RepoSummary contains aggregate information about an indexed repository.
+type RepoSummary struct {
+	Repo      string
+	CRDCount  int
+	LatestTag string
 }
 
 // CRDRow represents a CRD record returned from read queries.

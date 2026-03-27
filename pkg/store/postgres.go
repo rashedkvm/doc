@@ -176,6 +176,31 @@ func (s *PostgresStore) GetRepos(ctx context.Context) ([]string, error) {
 	return repos, rows.Err()
 }
 
+func (s *PostgresStore) GetRepoSummaries(ctx context.Context) ([]RepoSummary, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT t.repo,
+		        COUNT(DISTINCT c."group" || '/' || c.version || '/' || c.kind) AS crd_count,
+		        (SELECT name FROM tags WHERE repo = t.repo ORDER BY time DESC LIMIT 1) AS latest_tag
+		 FROM tags t
+		 INNER JOIN crds c ON c.tag_id = t.id
+		 GROUP BY t.repo
+		 ORDER BY t.repo`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []RepoSummary
+	for rows.Next() {
+		var s RepoSummary
+		if err := rows.Scan(&s.Repo, &s.CRDCount, &s.LatestTag); err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
 func (s *PostgresStore) UpsertTag(ctx context.Context, name, repo string, timestamp time.Time) (int, error) {
 	var tagID int
 	err := s.pool.QueryRow(ctx,

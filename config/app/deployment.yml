@@ -41,6 +41,8 @@ spec:
             - containerPort: #@ data.values.app_port
               name: http
           env:
+            - name: CONFIG_FILE
+              value: /etc/doc/providers.yml
             - name: APP_PORT
               valueFrom:
                 configMapKeyRef:
@@ -82,8 +84,6 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: PG_DB
-            - name: GITTER_HOST
-              value: #@ "gitter-service." + data.values.namespace + ".svc.cluster.local:1234"
             #@ end
             - name: ANALYTICS
               valueFrom:
@@ -95,11 +95,14 @@ spec:
                 configMapKeyRef:
                   name: doc-config
                   key: IS_DEV
-          #@ if data.values.db_driver == "sqlite":
           volumeMounts:
+            - name: providers
+              mountPath: /etc/doc
+              readOnly: true
+            #@ if data.values.db_driver == "sqlite":
             - name: data
               mountPath: /data
-          #@ end
+            #@ end
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -127,8 +130,11 @@ spec:
               port: #@ data.values.app_port
             initialDelaySeconds: 15
             periodSeconds: 20
-      #@ if data.values.db_driver == "sqlite":
       volumes:
+        - name: providers
+          configMap:
+            name: doc-providers
+        #@ if data.values.db_driver == "sqlite":
         - name: data
           emptyDir: {}
-      #@ end
+        #@ end
